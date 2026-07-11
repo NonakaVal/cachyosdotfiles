@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# =============================================================================
+# install-bt-fix
+# =============================================================================
+# Aplica correções de sistema para o dongle TP-Link UB5A (RTL8761) + BlueZ.
+# Execute UMA vez:  sudo ~/.local/bin/install-bt-fix
+# =============================================================================
+set -euo pipefail
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  echo "Rode com root:  sudo $0" >&2
+  exit 1
+fi
+
+echo "==> 1/5 modprobe: desativar USB autosuspend do btusb"
+cat > /etc/modprobe.d/btusb-no-autosuspend.conf << 'EOF'
+# Prevent Realtek/TP-Link Bluetooth USB dongles from USB autosuspend,
+# which causes headsets to connect and immediately drop.
+options btusb enable_autosuspend=0
+EOF
+
+echo "==> 2/5 udev: manter TP-Link UB5A (2357:0604) sempre ligado"
+cat > /etc/udev/rules.d/50-tp-link-ub5a-bluetooth.rules << 'EOF'
+# TP-Link UB5A (2357:0604) Realtek RTL8761BU — keep powered on
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="2357", ATTR{idProduct}=="0604", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
+EOF
+
+echo "==> 3/5 BlueZ: AutoEnable=true"
+if [[ -f /etc/bluetooth/main.conf ]]; then
+  cp -a /etc/bluetooth/main.conf "/etc/bluetooth/main.conf.bak.$(date +%s)"
+fi
+if grep -qE '^\s*AutoEnable\s*=' /etc/bluetooth/main.conf; then
+  sed -i 's/^\s*AutoEnable\s*=.*/AutoEnable=true/' /etc/bluetooth/main.conf
+elif grep -qE '^\s*#\s*AutoEnable\s*=' /etc/bluetooth/main.conf; then
+  sed -i 's/^\s*#\s*AutoEnable\s*=.*/AutoEnable=true/' /etc/bluetooth/main.conf
+else
+  printf '\n[Policy]\nAutoEnable=true\n' >> /etc/bluetooth/main.conf
+fi
+
+echo "==> 4/5 sudoers: restartbt sem senha (grupo wheel)"
+cat > /etc/sudoers.d/bluetooth-restart << 'EOF'
+# Allow members of wheel to restart bluetooth without a password (restartbt alias)
+%wheel ALL=(root) NOPASSWD: /usr/bin/systemctl restart bluetooth, /usr/bin/systemctl stop bluetooth, /usr/bin/systemctl start bluetooth, /usr/bin/systemctl status bluetooth
+EOF
+chmod 440 /etc/sudoers.d/bluetooth-restart
+visudo -cf /etc/sudoers.d/bluetooth-restart
+
+echo "==> 5/5 aplicar agora (sem reiniciar)"
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=usb --attr-match=idVendor=2357 --attr-match=idProduct=0604 || true
+
+if [[ -w /sys/module/btusb/parameters/enable_autosuspend ]]; then
+  echo 0 > /sys/module/btusb/parameters/enable_autosuspend || true
+fi
+
+found=0
+for d in /sys/bus/usb/devices/*; do
+  if [[ -f $d/idVendor && -f $d/idProduct ]] \
+     && [[ $(cat "$d/idVendor") == 2357 && $(cat "$d/idProduct") == 0604 ]]; then
+    found=1
+    echo on > "$d/power/control" || true
+    echo -1 > "$d/power/autosuspend" || true
+    echo "    $d control=$(cat "$d/power/control") autosuspend=$(cat "$d/power/autosuspend") runtime=$(cat "$d/power/runtime_status")"
+  fi
+done
+if [[ $found -eq 0 ]]; then
+  echo "    (dongle ainda não visto em /sys; udev vale no próximo plug/boot)"
+fi
+
+echo
+echo "Pronto. Correções de sistema instaladas."
+echo "Já existe o serviço de usuário bt-postlogin-fix (power-cycle após WirePlumber)."
+echo "Recomendo reiniciar uma vez para o modprobe btusb carregar com enable_autosuspend=0."
+echo "Teste: ligue o fone sem rodar restartbt."

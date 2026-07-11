@@ -1,0 +1,16 @@
+MenuBar=Disabled
+
+[DetailsMode]
+PreviewSize=16
+
+[General]
+Version=202
+
+[IconsMode]
+PreviewSize=128
+
+[MainWindow]
+MenuBar=Disabled
+
+[UiSettings]
+ColorScheme=BreezeDark

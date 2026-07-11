@@ -1,0 +1,15 @@
+# =============================================================================
+# CachyOS — Pacotes AUR (yay)
+# =============================================================================
+# Gerado de: pacman -Qm (pacotes estrangeiros/AUR)
+# Uso:   yay -S --needed - < packages-aur.list
+# =============================================================================
+
+basalt-bin                 # linting de shell scripts
+chatgpt-desktop-bin        # app desktop ChatGPT
+google-chrome              # Google Chrome
+openchamber                # 
+opencode-desktop-bin       # app desktop opencode
+opencode-kanban            # kanban board para opencode
+pacseek                    # TUI para buscar pacotes
+visual-studio-code-bin     # VS Code

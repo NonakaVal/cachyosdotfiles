@@ -1,0 +1,43 @@
+# =============================================================================
+# kwinrc — KWin (gerenciador de janelas do KDE Plasma 6)
+# =============================================================================
+# Inclui apenas configurações gerais. As seções [Tiling][UUID] foram removidas
+# pois são específicas de cada workspace/máquina e regeneradas pelo KDE.
+# =============================================================================
+
+[Desktops]
+Number=3
+Rows=1
+
+[Effect-windowview]
+BorderActivateAll=1
+
+[ElectricBorders]
+BottomRight=ShowDesktop
+
+[Plugins]
+desktopchangeosdEnabled=true
+dynamic_workspacesEnabled=true
+krohnkiteEnabled=true
+
+[Script-krohnkite]
+floatingLayoutOrder=1
+monocleLayoutOrder=9
+tileLayoutOrder=2
+
+[TabBox]
+DesktopMode=0
+LayoutName=compact
+
+[TabBoxAlternative]
+ActivitiesMode=0
+DesktopMode=0
+LayoutName=compact
+
+[Xwayland]
+Scale=1
+XwaylandEisNoPromptApps=steam
+
+[org.kde.kdecoration2]
+library=org.kde.kwin.aurorae.v2
+theme=__aurorae__svg__ChromeOS-dark

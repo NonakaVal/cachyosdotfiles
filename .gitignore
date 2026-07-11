@@ -1,0 +1,27 @@
+# =============================================================================
+# .gitignore — CachyOS Dotfiles
+# =============================================================================
+
+# Backups locais (install.sh / backup.sh)
+.backup/
+.backups/
+
+# Logs
+*.log
+
+# Estado do fastfetch (fila de imagens)
+apps/fastfetch/.state/
+apps/fastfetch/.random-config.jsonc
+
+# Imagens do fastfetch (adicionar manualmente)
+apps/fastfetch/img/random/
+
+# Secrets — NUNCA commitar
+**/*.pem
+**/*.key
+**/id_rsa*
+**/id_ed25519
+**/.ssh/
+
+# Configs com dados sensíveis (placeholders no repo)
+apps/aichat/config.yaml.local

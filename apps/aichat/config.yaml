@@ -1,0 +1,15 @@
+# =============================================================================
+# aichat — config.yaml
+# =============================================================================
+# Cliente de IA via CLI (Rust). Veja:
+#   https://github.com/sigoden/aichat
+#
+# ATENÇÃO: A API key abaixo é um PLACEHOLDER. Substitua pela sua chave real
+#          ou use variável de ambiente:  export GEMINI_API_KEY="sua-key"
+# =============================================================================
+
+model: gemini:gemini-2.5-flash
+
+clients:
+  - type: gemini
+    api_key: ENV_GEMINI_API_KEY

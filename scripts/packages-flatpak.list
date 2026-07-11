@@ -1,0 +1,14 @@
+# =============================================================================
+# CachyOS — Flatpaks
+# =============================================================================
+# Gerado de: flatpak list --app --columns=application
+# Pré-requisito: flatpak + flathub remote configurado
+# Uso:   flatpak install -y flathub <app_id>
+# =============================================================================
+
+# Flathub remote (rodar uma vez):
+#   flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+com.github.tchx84.Flatseal      # gerenciador de permissões flatpak
+io.missioncenter.MissionCenter  # monitor de sistema (estilo Gerenciador de Tarefas)
+it.mijorus.gearlever            # gerenciador de AppImages

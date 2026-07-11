@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+import subprocess
+from datetime import datetime
+import os
+import sys
+
+SCRIPT_PATH = os.path.realpath(__file__)
+
+COMMIT_OPTIONS = {
+    'update': ["small page fix", "section changed", "page content", "page content removed", "page content added", "full page and styles"],
+    'feat':   ['add new feature', 'create component', 'integrate API'],
+    'fix':    ['fix bug', 'resolve performance', 'adjust', 'critical error'],
+    'docs':   ['update documentation', 'add examples', 'fix typo', 'add comments', "update readme"],
+    'refactor': ['improve code', 'optimize', 'remove duplicate', 'simplify'],
+    'chore':  ['update dependencies', 'configure environment', 'adjust settings', 'clean up old code'],
+}
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def run_command(command: list[str], show_error=True) -> bool:
+    try:
+        subprocess.run(command, check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        if show_error:
+            print(f"\n❌ Error: {e}")
+        return False
+
+def select_option(prompt: str, options: list[str], allow_quit=False):
+    print(f"\n{prompt}")
+    for i, option in enumerate(options, 1):
+        print(f"  {i}: {option}")
+
+    suffix = " (or 'q' to quit): " if allow_quit else ": "
+    choice = input("\nEnter number" + suffix).strip().lower()
+
+    if allow_quit and choice == 'q':
+        return None
+    if choice.isdigit():
+        idx = int(choice)
+        if 1 <= idx <= len(options):
+            return idx - 1
+    print("⚠️  Invalid choice. Defaulting to last option.")
+    return len(options) - 1
+
+def generate_commit_message(commit_type: str, message_part: str) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return f"{commit_type}: {message_part} ({timestamp})"
+
+# ── commit flow ───────────────────────────────────────────────────────────────
+
+def commit_changes(message: str):
+    print(f"\nGenerated commit message:\n  🔸 {message}")
+    if input("\nConfirm commit? (y/n): ").lower().strip() != 'y':
+        print("\n❌ Commit canceled")
+        return
+    if run_command(['git', 'add', '.']) and run_command(['git', 'commit', '-m', message]):
+        print("\n✅ Commit successful!")
+        if input("Push to remote? (y/n): ").lower().strip() == 'y':
+            if run_command(['git', 'push']):
+                print("\n🚀 Successfully pushed to remote!")
+            else:
+                print("\n❌ Push failed")
+
+def create_custom_commit():
+    print("\nEnter your commit message:")
+    custom_msg = input("Message: ").strip()
+    commit_type = "chore"
+    for t in COMMIT_OPTIONS:
+        if custom_msg.lower().startswith(t + ":"):
+            commit_type = t
+            custom_msg = custom_msg[len(t)+1:].strip()
+            break
+    commit_changes(generate_commit_message(commit_type, custom_msg))
+
+def guided_commit():
+    types = list(COMMIT_OPTIONS.keys())
+    type_index = select_option("SELECT commit type:", types, allow_quit=True)
+    if type_index is None:
+        return
+    commit_type = types[type_index]
+    msg_options = COMMIT_OPTIONS[commit_type]
+    msg_index = select_option(f"SELECT message ({commit_type}):", msg_options)
+    commit_changes(generate_commit_message(commit_type, msg_options[msg_index]))
+
+def create_commit_flow():
+    print("\n  1: Guided commit (select from options)")
+    print("  2: Custom commit message")
+    print("  q: Cancel")
+    choice = input("\nSelect: ").strip().lower()
+    if choice == '1':
+        guided_commit()
+    elif choice == '2':
+        create_custom_commit()
+
+# ── edit self ─────────────────────────────────────────────────────────────────
+
+def edit_script():
+    editors = ['nano', 'vim', 'vi', 'gedit', 'code']
+    editor = None
+    for e in editors:
+        if subprocess.run(['which', e], capture_output=True).returncode == 0:
+            editor = e
+            break
+    if not editor:
+        print("❌ No editor found (nano, vim, gedit, code).")
+        return
+    print(f"\n📝 Opening {SCRIPT_PATH} with {editor}...")
+    subprocess.run([editor, SCRIPT_PATH])
+
+# ── git status ────────────────────────────────────────────────────────────────
+
+def show_status():
+    print()
+    subprocess.run(['git', 'status', '--short'])
+    print()
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
+def check_git_repo():
+    if not os.path.exists(".git"):
+        print("❌ Not a git repository. Navigate to a project folder first.")
+        sys.exit(1)
+
+def main():
+    check_git_repo()
+
+    print("\n🐙 Git Commit Assistant")
+    print(f"   📁 {os.getcwd()}")
+
+    while True:
+        show_status()
+        print("  1: New commit")
+        print("  2: Edit this script (gca)")
+        print("  3: Exit")
+        choice = input("\nSelect: ").strip()
+
+        if choice == '1':
+            create_commit_flow()
+        elif choice == '2':
+            edit_script()
+        elif choice == '3':
+            print("\n👋 Goodbye!\n")
+            break
+        else:
+            print("Invalid option.")
+
+if __name__ == "__main__":
+    main()

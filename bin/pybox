@@ -1,0 +1,8 @@
+#!/bin/sh
+# =============================================================================
+# pybox
+# =============================================================================
+# PyBox launcher — executa o menu principal usando o venv dedicado.
+# Preserva o diretório atual (PYBOX_CALL_DIR) para os scripts.
+# =============================================================================
+exec "$HOME/PyVenvs/pybox/bin/python" "$HOME/Github/PyBox/pybox.py" "$@"

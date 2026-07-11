@@ -1,0 +1,21 @@
+# =============================================================================
+# bt-postlogin-fix.service
+# =============================================================================
+# Serviço de usuário que estabiliza o Bluetooth após o WirePlumber (A2DP) subir.
+# Resolve o problema do dongle TP-Link UB5A + headset KD-771 no boot.
+# =============================================================================
+[Unit]
+Description=Stabilize Bluetooth after WirePlumber (A2DP) is ready
+Documentation=file://%h/.local/bin/bt-postlogin-fix
+After=wireplumber.service pipewire.service graphical-session.target
+Wants=wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/bt-postlogin-fix
+# Não falhar o login se o fone estiver desligado
+SuccessExitStatus=0 1
+TimeoutStartSec=90
+
+[Install]
+WantedBy=default.target

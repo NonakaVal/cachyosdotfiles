@@ -1,0 +1,7 @@
+[Plugins]
+krunner_dictionaryEnabled=false
+krunner_katesessionsEnabled=false
+krunner_powerdevilEnabled=false
+
+[Plugins][Favorites]
+plugins=krunner_sessions,krunner_powerdevil,krunner_services,krunner_systemsettings

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# =============================================================================
+# bt-postlogin-fix
+# =============================================================================
+# Garante Bluetooth estável após o WirePlumber registrar os endpoints A2DP.
+#
+# No boot o bluez sobe ~15s antes do PipeWire; o fone tenta reconectar cedo
+# demais e falha (SDP "Host is down"). O dongle USB TP-Link UB5A (RTL8761)
+# ainda entra em autosuspend e derruba a conexão. O restartbt (systemctl
+# restart bluetooth) "funcionava" porque recriava o stack já com o áudio pronto.
+#
+# Este script faz o equivalente sem root: power-cycle do adaptador depois do
+# WirePlumber, e tenta reconectar o fone se estiver ligado.
+# =============================================================================
+set -u
+
+HEADSET_MAC="${BT_HEADSET_MAC:-41:42:FF:6A:85:40}"
+LOG_TAG="bt-postlogin-fix"
+
+log() { logger -t "$LOG_TAG" -- "$*" 2>/dev/null || true; echo "[$LOG_TAG] $*"; }
+
+bt() {
+  # bluetoothctl interativo pode travar; --timeout limita espera
+  timeout 8 bluetoothctl --timeout 6 "$@" 2>/dev/null || true
+}
+
+# Espera adaptador + WirePlumber (máx ~30s)
+for _ in $(seq 1 30); do
+  if systemctl --user is-active --quiet wireplumber.service \
+     && bluetoothctl show >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+# Folga para MediaEndpoints A2DP registrarem no bluez
+sleep 2
+
+if bluetoothctl show 2>/dev/null | grep -q 'Powered: yes'; then
+  log "power-cycling adapter after audio stack is ready"
+  bt power off
+  sleep 1
+  bt power on
+  sleep 2
+else
+  log "adapter off; powering on"
+  bt power on
+  sleep 2
+fi
+
+if ! bluetoothctl info "$HEADSET_MAC" 2>/dev/null | grep -q 'Paired: yes'; then
+  log "headset $HEADSET_MAC not paired; skip connect"
+  log "done"
+  exit 0
+fi
+
+if bluetoothctl info "$HEADSET_MAC" 2>/dev/null | grep -q 'Connected: yes'; then
+  log "headset $HEADSET_MAC already connected"
+  log "done"
+  exit 0
+fi
+
+log "connecting headset $HEADSET_MAC"
+for attempt in 1 2 3; do
+  bt connect "$HEADSET_MAC"
+  sleep 1
+  if bluetoothctl info "$HEADSET_MAC" 2>/dev/null | grep -q 'Connected: yes'; then
+    log "connect ok (attempt $attempt)"
+    log "done"
+    exit 0
+  fi
+  log "connect attempt $attempt failed; retrying"
+  sleep 2
+done
+
+log "headset not connected (probably off or out of range) — ok"
+log "done"
+exit 0

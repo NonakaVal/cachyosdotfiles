@@ -1,0 +1,34 @@
+# =============================================================================
+# Git — config global
+# =============================================================================
+# NOTA: Substitua user.name e user.email se necessário.
+#       A diretiva url faz SSH no lugar de HTTPS (precisa de chave SSH no GitHub).
+# =============================================================================
+
+[user]
+    name = NonakaVal
+    email = valdenirnonaka001@gmail.com
+
+# Usar SSH em vez de HTTPS para o GitHub
+[url "git@github.com:"]
+    insteadOf = https://github.com/
+
+[init]
+    defaultBranch = main
+
+[core]
+    editor = micro
+    autocrlf = false
+
+[pull]
+    rebase = false
+
+[push]
+    autoSetupRemote = true
+
+[diff]
+    tool = meld
+
+[merge]
+    tool = meld
+    conflictstyle = diff3

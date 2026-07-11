@@ -1,0 +1,335 @@
+# =============================================================================
+# CachyOS — Pacotes oficiais (pacman)
+# =============================================================================
+# Gerado de: pacman -Qe (instalados explicitamente)
+# Uso:      sudo pacman -S --needed - < packages-pacman.list
+# Atualizar: pacman -Qeq > packages-pacman.list
+#
+# NOTA: Pacotes marcados com # vêm pré-instalados no ISO do CachyOS.
+#       Pacotes CachyOS-* só existem nos repositórios cachyos.
+# =============================================================================
+
+# ── Base & Kernel ─────────────────────────────────────────────────────────────
+base                          # vêm no ISO
+base-devel
+linux-cachyos                 # kernel principal (7.1.x)
+linux-cachyos-headers
+linux-cachyos-lts             # kernel LTS (fallback)
+linux-cachyos-lts-headers
+linux-cachyos-nvidia-open     # módulos NVIDIA open para kernel atual
+linux-cachyos-lts-nvidia-open # módulos NVIDIA open para kernel LTS
+linux-firmware
+intel-ucode                   # microcode Intel
+dkms
+
+# ── Bootloader (Limine) ───────────────────────────────────────────────────────
+limine
+limine-mkinitcpio-hook
+limine-snapper-sync           # rollback btrfs via Limine
+mkinitcpio
+efibootmgr
+efitools
+
+# ── CachyOS Core ──────────────────────────────────────────────────────────────
+cachyos-settings              # otimizações de sistema (sysctl, pacman, etc.)
+cachyos-micro-settings
+cachyos-hooks
+cachyos-keyring
+cachyos-mirrorlist
+cachyos-v3-mirrorlist
+cachyos-v4-mirrorlist
+cachyos-rate-mirrors
+cachyos-packageinstaller
+cachyos-kernel-manager
+cachy-update
+cachyos-snapper-support
+chwd                          # CachyOS hardware detector
+
+# ── CachyOS KDE Themes ────────────────────────────────────────────────────────
+cachyos-kde-settings
+cachyos-emerald-kde-theme-git
+cachyos-nord-kde-theme-git
+cachyos-iridescent-kde
+cachyos-wallpapers
+cachyos-plymouth-bootanimation
+cachyos-plymouth-theme
+cachyos-hello
+
+# ── Shell ─────────────────────────────────────────────────────────────────────
+cachyos-fish-config           # config base do Fish para CachyOS
+cachyos-zsh-config
+bash-completion
+
+# ── Network ───────────────────────────────────────────────────────────────────
+networkmanager
+networkmanager-openvpn
+modemmanager
+netctl
+iwd                           # backend Wi-Fi
+wpa_supplicant
+dnsmasq
+nss-mdns                      # mDNS (.local)
+bind                          # dig, nslookup
+openssh
+ethtool
+
+# ── Bluetooth ─────────────────────────────────────────────────────────────────
+bluez
+bluez-utils
+bluez-libs
+bluez-obex
+bluez-hid2hci
+
+# ── Audio (PipeWire) ──────────────────────────────────────────────────────────
+pipewire-alsa
+pipewire-pulse
+wireplumber
+gst-libav
+gst-plugin-pipewire
+gst-plugins-bad
+gst-plugins-ugly
+sof-firmware                  # firmware de áudio
+alsa-firmware
+alsa-plugins
+alsa-utils
+pavucontrol                   # controle de volume
+
+# ── NVIDIA & Gráficos ─────────────────────────────────────────────────────────
+nvidia-utils                  # driver userspace (610.43.03)
+nvidia-settings
+opencl-nvidia
+lib32-nvidia-utils
+lib32-opencl-nvidia
+libva-nvidia-driver           # VA-API via NVIDIA
+egl-wayland
+mesa-utils
+vulkan-icd-loader
+lib32-vulkan-icd-loader
+
+# ── KDE Plasma 6 ──────────────────────────────────────────────────────────────
+plasma-desktop
+plasma-nm
+plasma-pa
+plasma-firewall
+plasma-systemmonitor
+plasma-browser-integration
+plasma-login-manager
+plasma-thunderbolt
+kdeplasma-addons
+bluedevil                     # bluetooth KDE
+powerdevil                    # gestão de energia
+power-profiles-daemon
+kscreen                       # gestão de monitores
+kwallet-pam
+kwalletmanager
+kde-gtk-config                # integração GTK no KDE
+breeze-gtk
+plymouth
+plymouth-kcm
+kscreen
+kinfocenter
+kdeconnect
+spectacle                     # screenshots
+cliphist                      # clipboard history (Wayland)
+
+# ── KDE Apps ──────────────────────────────────────────────────────────────────
+dolphin                       # gerenciador de arquivos
+konsole                       # terminal
+kate                          # editor
+ark                           # extrator de arquivos
+gwenview                      # visualizador de imagens
+kcalc                         # calculadora
+filelight                     # uso de disco (gráfico)
+partitionmanager              # gerenciador de partições
+kdialog
+kio-admin
+mousepad                      # editor simples (XFCE)
+
+# ── COSMIC Desktop (alternativo) ──────────────────────────────────────────────
+cosmic-comp
+cosmic-session
+cosmic-panel
+cosmic-applets
+cosmic-app-library
+cosmic-launcher
+cosmic-settings
+cosmic-settings-daemon
+cosmic-files
+cosmic-terminal
+cosmic-text-editor
+cosmic-bg
+cosmic-monitor
+cosmic-notifications
+cosmic-osd
+cosmic-player
+cosmic-randr
+cosmic-screenshot
+cosmic-workspaces
+cosmic-greeter
+cosmic-icon-theme
+cosmic-wallpapers
+xdg-desktop-portal-cosmic
+
+# ── Gaming ────────────────────────────────────────────────────────────────────
+steam
+gamemode
+lib32-gamemode
+gamescope
+protontricks
+cachyos-gaming-applications
+cachyos-gaming-meta
+
+# ── Mídia ─────────────────────────────────────────────────────────────────────
+vlc
+vlc-plugins-all
+haruna                        # player KDE
+obs-studio
+kdenlive                      # editor de vídeo
+ffmpegthumbnailer
+ffmpegthumbs
+libdvdcss                     # playback de DVD
+
+# ── Internet & Comunicação ────────────────────────────────────────────────────
+firefox
+discord
+qbittorrent
+yt-dlp
+
+# ── Desenvolvimento ───────────────────────────────────────────────────────────
+git
+cmake
+nasm
+vim
+micro                         # editor TUI
+diffutils
+less
+texinfo
+man-db
+man-pages
+pkgfile
+python
+python-pip
+python-packaging
+python-defusedxml
+ruby
+perl
+dotnet-runtime-8.0
+jupyterlab
+meld                          # diff visual
+
+# ── Produtividade ─────────────────────────────────────────────────────────────
+libreoffice-fresh
+obsidian
+copyq                         # gerenciador de clipboard
+shelly                        # shell tracker
+
+# ── Fonts ─────────────────────────────────────────────────────────────────────
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+ttf-meslo-nerd                # fonte principal (Nerd Font)
+ttf-liberation
+ttf-dejavu
+ttf-bitstream-vera
+ttf-opensans
+cantarell-fonts
+awesome-terminal-fonts
+
+# ── CLI Utilities & System Tools ──────────────────────────────────────────────
+fastfetch                     # system info (neofetch替代)
+btop                          # monitor de sistema
+glances                       # monitor web
+glow                          # markdown renderer
+ripgrep                       # rg
+duf                           # df alternativo
+pv                            # pipe viewer
+rclone                        # sync na nuvem (Google Drive)
+rsync
+wget
+which
+plocate                       # find替代
+lsb-release
+lsscsi
+dmidecode                     # info de hardware
+hwinfo
+hwdetect
+smartmontools                 # S.M.A.R.T.
+sg3_utils
+cpupower
+intel-lpmd                    # gestão de energia Intel
+
+# ── Filesystem & Disk ─────────────────────────────────────────────────────────
+btrfs-progs
+btrfs-assistant
+snapper                       # snapshots automáticos
+e2fsprogs                     # ext4
+xfsprogs                      # XFS
+f2fs-tools
+nilfs-utils
+exfatprogs                    # exFAT (pendrives)
+mtools
+dosfstools                    # FAT
+jfsutils
+lvm2
+device-mapper
+cryptsetup                    # LUKS
+mdadm                         # RAID
+dmraid
+fsarchiver
+hdparm
+
+# ── Wayland / X11 ─────────────────────────────────────────────────────────────
+xorg-xwayland
+wl-clipboard                  # wl-copy/wl-paste
+xclip
+xsel
+xdotool
+xsettingsd
+
+# ── Input Devices ─────────────────────────────────────────────────────────────
+xone-dkms                     # driver Xbox One controller (USB)
+xone-dongle-firmware
+xpadneo-dkms                  # driver Xbox One S/X controller (Bluetooth)
+
+# ── Virtualização & Containers ────────────────────────────────────────────────
+
+# ── Segurança ─────────────────────────────────────────────────────────────────
+ufw                           # firewall
+ufw-extras
+gnome-keyring                 # secrets
+
+# ── Flatpak ───────────────────────────────────────────────────────────────────
+flatpak
+fuse2                         # AppImage support
+
+# ── Thumbnails & Preview ──────────────────────────────────────────────────────
+kdegraphics-thumbnailers
+libgsf
+libopenraw
+poppler-glib
+libmythes
+
+# ── Diversos ──────────────────────────────────────────────────────────────────
+accountsservice
+notification-daemon
+phonon-qt6-vlc
+realtime-privileges           # grupo realtime para áudio/jogos
+rebuild-detector              # avisa sobre AUR rebuild
+reflector                     # atualiza mirrorlist
+rofi                          # launcher (X11/Wayland)
+s-nail                        # mail
+nano
+nano-syntax-highlighting
+tesseract-data-eng            # OCR
+usb_modeswitch
+usbutils
+sysfsutils
+logrotate
+char-white
+chafa                         # render de imagens no terminal
+unrar
+unzip
+nfs-utils
+xl2tpd                        # VPN L2TP
+xdg-user-dirs
+xdg-desktop-portal-gtk
