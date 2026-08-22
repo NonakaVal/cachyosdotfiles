@@ -6,8 +6,6 @@ Uso:
     gca --stage-all        # IA: gera, confirma, stage all + commit
     gca --commit           # IA: gera, confirma, commit (sem stage)
     gca -y                 # IA direto (sem confirmação)
-
-Requer: pip install requests
 """
 
 import subprocess
@@ -18,9 +16,12 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# config.py fica em ~/.config.py é resolvido via HOME (o script costuma ser
+# acessado por symlink em ~/.local/bin, então __file__.resolve() apontaria
+# para o repositório de dotfiles e não para $HOME)
+HOME_DIR = Path.home()
+if str(HOME_DIR) not in sys.path:
+    sys.path.insert(0, str(HOME_DIR))
 
 from config import GEMINI_API_KEY, GEMINI_API_URL, GEMINI_MODEL
 
@@ -112,8 +113,8 @@ def collect_git_context():
 # ── chamada direta à API do Gemini ───────────────────────────────────────
 
 def generate_commit_message(context: str) -> str:
-    if GEMINI_API_KEY == "SUA_CHAVE_AQUI":
-        print("❌ Configure GEMINI_API_KEY no topo do script.")
+    if GEMINI_API_KEY in ("", "SUA_CHAVE_AQUI"):
+        print("❌ Configure GEMINI_API_KEY em ~/config.py.")
         return "update files"
 
     payload = {
