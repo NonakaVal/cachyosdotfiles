@@ -110,7 +110,7 @@ backup_services() {
         done
     fi
 
-    local bin_scripts=(bt-postlogin-fix install-bt-fix pybox clipa gca)
+    local bin_scripts=(bt-postlogin-fix install-bt-fix pybox clipa gca xbox-drift-fix qwen-edit hydra)
     for script in "${bin_scripts[@]}"; do
         backup_file "$HOME/.local/bin/$script" "${BACKUP_DIR}/bin/$script"
     done

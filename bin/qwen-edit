@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# qwen-edit — cliente CLI (curl) para a Space Qwen-Image-Edit-2511-LoRAs-Fast (HF)
+#
+# Edita/transforma imagens via prompt de texto + adaptadores LoRA (estilos).
+#
+# Uso:
+#   qwen-edit -i foto.png -p "transformar em anime" -a Photo-to-Anime
+#   qwen-edit -i a.jpg -i b.jpg -p "juntar estilo cinematográfico" -a Cinematic-FlatLog -o saida.png
+#   qwen-edit -i img.png -p "upscale e nitidez" -a Upscaler -n 8
+#   qwen-edit --list-adapters
+#
+# Saída: salva o PNG resultante e imprime o caminho final.
+set -euo pipefail
+
+BASE="https://prithivmlmods-qwen-image-edit-2511-loras-fast.hf.space"
+CREDS="${HOME}/.config/opencode/qwen-credentials"
+
+ADAPTERS=(
+  "Multiple-Angles" "Photo-to-Anime" "Anime-V2" "Light-Migration"
+  "Upscaler" "Style-Transfer" "Manga-Tone" "Anything2Real" "Fal-Multiple-Angles"
+  "Polaroid-Photo" "Unblur-Anything" "Midnight-Noir-Eyes-Spotlight"
+  "Hyper-Realistic-Portrait" "Ultra-Realistic-Portrait" "Pixar-Inspired-3D"
+  "Noir-Comic-Book" "Any-light" "Studio-DeLight" "Cinematic-FlatLog"
+)
+
+die()  { printf 'erro: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  cat >&2 <<'EOF'
+
+Opções:
+  -i, --image    caminho da imagem (ou URL http/https). Repita para várias.
+  -p, --prompt   prompt de edição (obrigatório).
+  -a, --adapter  adaptador LoRA (padrão: Photo-to-Anime). Veja --list-adapters.
+  -s, --seed     seed (inteiro >=0; padrão: 0).
+  -g, --guidance escala de guia (float; padrão: 1.0).
+  -n, --steps    passos (inteiro; padrão: 4).
+  -r, --no-randomize  desliga randomização da seed (padrão: randomize ligado).
+  -o, --output   caminho de saída (padrão: qwen_out_<seed>.png no cwd).
+  -w, --max-wait tempo máximo de espera em segundos (padrão: 180).
+      --list-adapters   lista os adaptadores e sai.
+  -h, --help     mostra esta ajuda.
+EOF
+}
+
+list_adapters() { printf '%s\n' "${ADAPTERS[@]}"; exit 0; }
+
+# ---- argumentos ----
+INPUTS=()
+PROMPT=""
+ADAPTER="Photo-to-Anime"
+SEED=0
+RANDOMIZE=true
+GUIDANCE=1.0
+STEPS=4
+OUTPUT=""
+MAXWAIT=180
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -i|--image)      INPUTS+=("$2"); shift 2;;
+    -p|--prompt)     PROMPT="$2"; shift 2;;
+    -a|--adapter)    ADAPTER="$2"; shift 2;;
+    -s|--seed)       SEED="$2"; shift 2;;
+    -g|--guidance)   GUIDANCE="$2"; shift 2;;
+    -n|--steps)      STEPS="$2"; shift 2;;
+    -r|--no-randomize) RANDOMIZE=false; shift;;
+    -o|--output)     OUTPUT="$2"; shift 2;;
+    -w|--max-wait)   MAXWAIT="$2"; shift 2;;
+    --list-adapters) list_adapters;;
+    -h|--help)       usage; exit 0;;
+    *) die "argumento desconhecido: $1 (use -h)";;
+  esac
+done
+
+# ---- validação ----
+[ ${#INPUTS[@]} -gt 0 ] || { usage; die "informe ao menos uma imagem com -i"; }
+[ -n "$PROMPT" ]        || { usage; die "informe o prompt com -p"; }
+
+# valida adaptador
+valid=false
+for a in "${ADAPTERS[@]}"; do [ "$a" = "$ADAPTER" ] && { valid=true; break; }; done
+$valid || die "adaptador inválido: '$ADAPTER'. Use --list-adapters."
+
+command -v curl >/dev/null || die "curl ausente."
+command -v jq   >/dev/null || die "jq ausente."
+
+# ---- token ----
+if [ -z "${HF_TOKEN:-}" ] && [ -f "$CREDS" ]; then
+  # shellcheck disable=SC1090
+  . "$CREDS"
+fi
+[ -n "${HF_TOKEN:-}" ] || die "HF_TOKEN não definido (exporte ou coloque em $CREDS)."
+
+# ---- prepara imagens (baixa URL, base64, monta JSON array) ----
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
+IMAGES_JSON='[]'
+idx=0
+for img in "${INPUTS[@]}"; do
+  if [[ "$img" =~ ^https?:// ]]; then
+    local_file="$TMPDIR/in_$idx.${img##*.}"
+    curl -s --max-time 60 -L "$img" -o "$local_file" || die "falha ao baixar: $img"
+    file="$local_file"
+  else
+    file="$img"
+  fi
+  [ -f "$file" ] || die "arquivo não encontrado: $file"
+  b64="$(base64 -w0 "$file")"
+  IMAGES_JSON="$(jq -nc --arg b "$b64" --argjson arr "$IMAGES_JSON" '$arr + [$b]')"
+  idx=$((idx+1))
+done
+
+# ---- acorda a Space se estiver fria ----
+printf -- '-> verificando a Space...\n' >&2
+for i in 1 2 3 4 5; do
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$BASE/" || echo 000)"
+  [ "$code" = "200" ] && break
+  printf '   (space respondendo %s, tentando novamente %d/5)\n' "$code" "$i" >&2
+  sleep 4
+done
+
+# ---- envia o job ----
+BODY="$(jq -nc \
+  --arg img "$IMAGES_JSON" --arg p "$PROMPT" --arg a "$ADAPTER" \
+  --argjson seed "$SEED" --argjson rand "$RANDOMIZE" \
+  --argjson gs "$GUIDANCE" --argjson steps "$STEPS" \
+  '{data:[$img,$p,$a,$seed,$rand,$gs,$steps]}')"
+
+printf -- '-> enviando job (adapter=%s, steps=%s, guidance=%s)...\n' "$ADAPTER" "$STEPS" "$GUIDANCE" >&2
+RESP="$(curl -s --max-time 45 -X POST "$BASE/gradio_api/call/infer" \
+  -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" -d "$BODY")"
+EID="$(jq -r '.event_id // empty' <<<"$RESP")"
+[ -n "$EID" ] || die "sem event_id. Resposta: $RESP"
+
+# ---- aguarda resultado (SSE) ----
+printf -- '-> aguardando resultado (event_id=%s, até %ss)...\n' "$EID" "$MAXWAIT" >&2
+SSE="$(curl -s -N --max-time "$MAXWAIT" -H "Authorization: Bearer $HF_TOKEN" \
+        "$BASE/gradio_api/call/infer/$EID" 2>/dev/null || true)"
+
+# detecta erro
+if grep -q '^event: error' <<<"$SSE"; then
+  errmsg="$(awk 'BEGIN{RS=""; FS="\n"} /event: error/{for(i=1;i<=NF;i++) if($i~/^data:/){sub(/^data:[ ]?/,"",$i); print $i}}' <<<"$SSE")"
+  die "a API retornou erro: ${errmsg:-desconhecido}"
+fi
+
+# extrai o bloco "event: complete"
+DATA="$(awk 'BEGIN{RS=""; FS="\n"} /event: complete/{for(i=1;i<=NF;i++) if($i~/^data:/){sub(/^data:[ ]?/,"",$i); print $i}}' <<<"$SSE")"
+[ -n "$DATA" ] || die "não recebeu 'complete'. Stream:\n$SSE"
+
+URL="$(jq -r '.[0].url // .[0].path // empty' <<<"$DATA")"
+SEEDOUT="$(jq -r '.[1] // empty' <<<"$DATA")"
+[ -n "$URL" ] || die "sem URL de saída nos dados: $DATA"
+
+# ---- download do resultado ----
+[[ "$URL" =~ ^https?:// ]] || URL="$BASE/gradio_api/file=$URL"
+[ -n "$OUTPUT" ] || OUTPUT="qwen_out_${SEEDOUT:-0}.png"
+
+printf -- '-> baixando resultado para %s...\n' "$OUTPUT" >&2
+curl -s --max-time 90 -H "Authorization: Bearer $HF_TOKEN" -L "$URL" -o "$OUTPUT"
+[ -s "$OUTPUT" ] || die "download vazio."
+
+# imprime SOMENTE o caminho final no stdout (fácil de capturar)
+printf '%s\n' "$OUTPUT"

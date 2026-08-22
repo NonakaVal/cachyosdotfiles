@@ -1,149 +1,269 @@
 #!/usr/bin/env python3
+"""gca — Git Commit Assistant com IA (versão standalone, 1 arquivo só)
+
+Uso:
+    gca                    # Menu interativo
+    gca --stage-all        # IA: gera, confirma, stage all + commit
+    gca --commit           # IA: gera, confirma, commit (sem stage)
+    gca -y                 # IA direto (sem confirmação)
+
+Requer: pip install requests
+"""
+
 import subprocess
-from datetime import datetime
-import os
 import sys
+import os
+import json
+import urllib.request
+import urllib.error
+from pathlib import Path
 
-SCRIPT_PATH = os.path.realpath(__file__)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-COMMIT_OPTIONS = {
-    'update': ["small page fix", "section changed", "page content", "page content removed", "page content added", "full page and styles"],
-    'feat':   ['add new feature', 'create component', 'integrate API'],
-    'fix':    ['fix bug', 'resolve performance', 'adjust', 'critical error'],
-    'docs':   ['update documentation', 'add examples', 'fix typo', 'add comments', "update readme"],
-    'refactor': ['improve code', 'optimize', 'remove duplicate', 'simplify'],
-    'chore':  ['update dependencies', 'configure environment', 'adjust settings', 'clean up old code'],
+from config import GEMINI_API_KEY, GEMINI_API_URL, GEMINI_MODEL
+
+# ── config da IA ────────────────────────────────────────────────────────
+GEMINI_URL = GEMINI_API_URL
+
+SYSTEM_PROMPT = """\
+You are a commit message generator. Based on the git diff/status below, write a
+CONCISE commit message:
+- First line: short summary in English, lowercase, no period
+- Blank line
+- Bullet points describing each meaningful change
+- Ignore .env, .obsidian, .vscode, .idea files (just say "update config" if relevant)
+- Output ONLY the commit message, nothing else.
+"""
+
+COMMIT_TYPES = {
+    "feat": "Nova funcionalidade",
+    "fix": "Correção de bug",
+    "docs": "Documentação",
+    "refactor": "Refatoração",
+    "style": "Estilo/Formatação",
+    "chore": "Tarefas gerais",
+    "perf": "Performance",
+    "test": "Testes",
 }
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+IGNORED_PREFIXES = (".obsidian/", ".vscode/", ".idea/")
+IGNORED_SUFFIXES = (".env", ".env.local", ".env.development", ".env.production", ".env.test")
 
-def run_command(command: list[str], show_error=True) -> bool:
+
+# ── helpers de git/shell ────────────────────────────────────────────────
+
+def run(cmd, input_text=None):
+    return subprocess.run(cmd, capture_output=True, text=True, input=input_text)
+
+
+def git(*args):
+    r = run(["git", *args])
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def is_ignored(path):
+    return path.startswith(IGNORED_PREFIXES) or path.endswith(IGNORED_SUFFIXES)
+
+
+def confirm(msg):
     try:
-        subprocess.run(command, check=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        if show_error:
-            print(f"\n❌ Error: {e}")
+        return input(msg).strip().lower() == "y"
+    except EOFError:
         return False
 
-def select_option(prompt: str, options: list[str], allow_quit=False):
-    print(f"\n{prompt}")
-    for i, option in enumerate(options, 1):
-        print(f"  {i}: {option}")
 
-    suffix = " (or 'q' to quit): " if allow_quit else ": "
-    choice = input("\nEnter number" + suffix).strip().lower()
+def clear():
+    os.system("clear")
 
-    if allow_quit and choice == 'q':
-        return None
-    if choice.isdigit():
-        idx = int(choice)
-        if 1 <= idx <= len(options):
-            return idx - 1
-    print("⚠️  Invalid choice. Defaulting to last option.")
-    return len(options) - 1
 
-def generate_commit_message(commit_type: str, message_part: str) -> str:
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return f"{commit_type}: {message_part} ({timestamp})"
+def print_msg(msg):
+    print(f"\n{'─' * 52}\n📝 Mensagem:\n")
+    for line in msg.split("\n"):
+        print(f"   {line}")
+    print("─" * 52)
 
-# ── commit flow ───────────────────────────────────────────────────────────────
 
-def commit_changes(message: str):
-    print(f"\nGenerated commit message:\n  🔸 {message}")
-    if input("\nConfirm commit? (y/n): ").lower().strip() != 'y':
-        print("\n❌ Commit canceled")
+# ── coleta de contexto do git (simplificada) ────────────────────────────
+
+def collect_git_context():
+    status = git("status", "--porcelain")
+    lines = [l for l in status.split("\n") if l.strip() and not is_ignored(l[3:].strip())]
+    if not lines:
+        return None, ""
+
+    diff = git("diff")
+    staged = git("diff", "--cached")
+    untracked = [f for f in git("ls-files", "--others", "--exclude-standard").split("\n")
+                 if f and not is_ignored(f)]
+
+    parts = ["## Status\n" + "\n".join(lines)]
+    if diff:
+        parts.append("## Diff (unstaged)\n```diff\n" + diff[:6000] + "\n```")
+    if staged:
+        parts.append("## Diff (staged)\n```diff\n" + staged[:6000] + "\n```")
+    if untracked:
+        parts.append("## New files\n" + "\n".join(f"- {f}" for f in untracked))
+
+    return "\n\n".join(lines), "\n\n".join(parts)
+
+
+# ── chamada direta à API do Gemini ───────────────────────────────────────
+
+def generate_commit_message(context: str) -> str:
+    if GEMINI_API_KEY == "SUA_CHAVE_AQUI":
+        print("❌ Configure GEMINI_API_KEY no topo do script.")
+        return "update files"
+
+    payload = {
+        "contents": [{"parts": [{"text": context}]}],
+        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+    }
+    req = urllib.request.Request(
+        GEMINI_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except urllib.error.HTTPError as e:
+        print(f"❌ Erro na API ({e.code}): {e.read()[:300]}")
+        return "update files"
+    except Exception as e:
+        print(f"❌ Falha ao chamar a IA: {e}")
+        return "update files"
+
+
+# ── commit core ──────────────────────────────────────────────────────────
+
+def do_commit(msg, stage_all=False):
+    if stage_all:
+        print("\n→ Staging all changes...")
+        if run(["git", "add", "-A"]).returncode != 0:
+            print("❌ Falha no git add.")
+            return False
+
+    r = run(["git", "commit", "-m", msg])
+    if r.returncode != 0:
+        print(f"❌ Falha no git commit: {r.stderr[:300]}")
+        return False
+
+    print("\n✅ Commit realizado!")
+    print_msg(msg)
+    return True
+
+
+def offer_push():
+    if confirm("\nPush para remote? (y/n): "):
+        print("→ Fazendo push...")
+        print("🚀 Push realizado!" if run(["git", "push"]).returncode == 0 else "❌ Push falhou.")
+
+
+def ia_commit(stage_all=True, auto_confirm=False):
+    print("\n🐙 gerando mensagem de commit com IA...")
+    _, context = collect_git_context()
+    if not context:
+        print("\n📭 Nenhuma mudança para commitar.")
         return
-    if run_command(['git', 'add', '.']) and run_command(['git', 'commit', '-m', message]):
-        print("\n✅ Commit successful!")
-        if input("Push to remote? (y/n): ").lower().strip() == 'y':
-            if run_command(['git', 'push']):
-                print("\n🚀 Successfully pushed to remote!")
-            else:
-                print("\n❌ Push failed")
 
-def create_custom_commit():
-    print("\nEnter your commit message:")
-    custom_msg = input("Message: ").strip()
-    commit_type = "chore"
-    for t in COMMIT_OPTIONS:
-        if custom_msg.lower().startswith(t + ":"):
-            commit_type = t
-            custom_msg = custom_msg[len(t)+1:].strip()
-            break
-    commit_changes(generate_commit_message(commit_type, custom_msg))
+    msg = generate_commit_message(context)
+    print_msg(msg)
+
+    if not auto_confirm and not confirm("\nConfirmar commit? (y/n): "):
+        print("\n❌ Cancelado.")
+        return
+
+    if do_commit(msg, stage_all=stage_all) and not auto_confirm:
+        offer_push()
+
 
 def guided_commit():
-    types = list(COMMIT_OPTIONS.keys())
-    type_index = select_option("SELECT commit type:", types, allow_quit=True)
-    if type_index is None:
+    keys = list(COMMIT_TYPES)
+    print("\nSelecione o TIPO de commit:")
+    for i, k in enumerate(keys, 1):
+        print(f"  {i}: {k} — {COMMIT_TYPES[k]}")
+    try:
+        idx = int(input("\nEscolha: ")) - 1
+        commit_type = keys[idx]
+    except (ValueError, IndexError, EOFError):
+        print("❌ Opção inválida.")
         return
-    commit_type = types[type_index]
-    msg_options = COMMIT_OPTIONS[commit_type]
-    msg_index = select_option(f"SELECT message ({commit_type}):", msg_options)
-    commit_changes(generate_commit_message(commit_type, msg_options[msg_index]))
 
-def create_commit_flow():
-    print("\n  1: Guided commit (select from options)")
-    print("  2: Custom commit message")
-    print("  q: Cancel")
-    choice = input("\nSelect: ").strip().lower()
-    if choice == '1':
-        guided_commit()
-    elif choice == '2':
-        create_custom_commit()
-
-# ── edit self ─────────────────────────────────────────────────────────────────
-
-def edit_script():
-    editors = ['nano', 'vim', 'vi', 'gedit', 'code']
-    editor = None
-    for e in editors:
-        if subprocess.run(['which', e], capture_output=True).returncode == 0:
-            editor = e
-            break
-    if not editor:
-        print("❌ No editor found (nano, vim, gedit, code).")
+    desc = input(f"Descrição ({commit_type}): ").strip()
+    if not desc:
+        print("❌ Descrição vazia. Cancelado.")
         return
-    print(f"\n📝 Opening {SCRIPT_PATH} with {editor}...")
-    subprocess.run([editor, SCRIPT_PATH])
 
-# ── git status ────────────────────────────────────────────────────────────────
+    msg = f"{commit_type}: {desc}"
+    print_msg(msg)
+    if confirm("\nConfirmar commit? (y/n): ") and do_commit(msg, stage_all=True):
+        offer_push()
 
-def show_status():
-    print()
-    subprocess.run(['git', 'status', '--short'])
-    print()
 
-# ── main ──────────────────────────────────────────────────────────────────────
+def custom_commit():
+    msg = input("\nMensagem: ").strip()
+    if not msg:
+        print("❌ Mensagem vazia. Cancelado.")
+        return
+    print_msg(msg)
+    if confirm("\nConfirmar commit? (y/n): ") and do_commit(msg, stage_all=True):
+        offer_push()
+
+
+# ── menus ────────────────────────────────────────────────────────────────
+
+def commit_flow():
+    clear()
+    print("\n📝 NOVO COMMIT")
+    print("  1: 🤖 Commit com IA (stage all + commit)")
+    print("  2: 🤖 Commit com IA (apenas commit)")
+    print("  3: 🎯 Commit guiado (tipo + descrição)")
+    print("  4: ✍️  Mensagem personalizada")
+    print("  q: 🔙 Voltar")
+
+    choice = input("\nEscolha: ").strip().lower()
+    {
+        "1": lambda: ia_commit(stage_all=True),
+        "2": lambda: ia_commit(stage_all=False),
+        "3": guided_commit,
+        "4": custom_commit,
+    }.get(choice, lambda: None)()
+
 
 def check_git_repo():
-    if not os.path.exists(".git"):
-        print("❌ Not a git repository. Navigate to a project folder first.")
+    if run(["git", "rev-parse", "--is-inside-work-tree"]).returncode != 0:
+        print("❌ Não é um repositório git.")
         sys.exit(1)
 
+
 def main():
+    if len(sys.argv) > 1:
+        args = sys.argv[1:]
+        ia_commit(stage_all="--commit" not in args, auto_confirm="-y" in args or "--yes" in args)
+        return
+
     check_git_repo()
-
-    print("\n🐙 Git Commit Assistant")
-    print(f"   📁 {os.getcwd()}")
-
+    clear()
     while True:
-        show_status()
-        print("  1: New commit")
-        print("  2: Edit this script (gca)")
-        print("  3: Exit")
-        choice = input("\nSelect: ").strip()
-
-        if choice == '1':
-            create_commit_flow()
-        elif choice == '2':
-            edit_script()
-        elif choice == '3':
-            print("\n👋 Goodbye!\n")
+        print("\n" + "─" * 52)
+        subprocess.run(["git", "status", "--short"])
+        print("  [1] 📝 Novo commit   [2] 🚀 Push   [3] 👋 Sair")
+        choice = input("\n  Escolha: ").strip()
+        if choice == "1":
+            commit_flow()
+        elif choice == "2":
+            if confirm("Push para remote? (y/n): "):
+                print("🚀 Push realizado!" if run(["git", "push"]).returncode == 0 else "❌ Push falhou.")
+        elif choice == "3":
+            print("\n  👋 Até logo!\n")
             break
         else:
-            print("Invalid option.")
+            print("  ❌ Opção inválida.")
+
 
 if __name__ == "__main__":
     main()

@@ -12,7 +12,7 @@
 # Este script faz o equivalente sem root: power-cycle do adaptador depois do
 # WirePlumber, e tenta reconectar o fone se estiver ligado.
 # =============================================================================
-set -u
+set -euo pipefail
 
 HEADSET_MAC="${BT_HEADSET_MAC:-41:42:FF:6A:85:40}"
 LOG_TAG="bt-postlogin-fix"

@@ -30,6 +30,7 @@ cachyosdotfiles/
 │
 ├── scripts/
 │   ├── provision.sh               # Menu interativo pós-reboot (rodar como root)
+│   ├── otimizar_armazenamento.sh   # Limpeza/otimização de espaço (Btrfs/Snapper)
 │   ├── packages-pacman.list       # Pacotes oficiais (279, categorizados)
 │   ├── packages-aur.list          # Pacotes AUR (8)
 │   └── packages-flatpak.list      # Flatpaks (3)
@@ -58,9 +59,12 @@ cachyosdotfiles/
 └── bin/                           # Scripts em ~/.local/bin
     ├── bt-postlogin-fix           # Power-cycle BT após WirePlumber
     ├── install-bt-fix             # Fix root one-shot (TP-Link UB5A)
+    ├── xbox-drift-fix             # Filtro de drift Xbox Controller (evsieve)
     ├── pybox                      # Launcher PyBox
     ├── clipa                      # Clipboard Assistant (fzf)
-    └── gca                        # Git Commit Assistant (Python)
+    ├── gca                        # Git Commit Assistant (Python)
+    ├── qwen-edit                  # Edição de imagem via HF Space (LoRA)
+    └── hydra                      # Launcher Hydra AppImage
 ```
 
 ## Fluxo Pós-Reboot (Reinstalação Completa)
@@ -107,8 +111,14 @@ fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/fun
 | `8` services  | Habilitar bluetooth, NetworkManager, ufw, etc      |
 | `9` fish      | Fish como shell padrão (chsh)                      |
 | `A` dotfiles  | Aplicar symlinks (install.sh)                      |
+| `B` optimize  | Otimizar armazenamento (Btrfs/Snapper/Flatpak)     |
 
 Atalhos: `essential` = 1+2+3+4+5+6+8+9 · `all` = tudo
+
+Suporta `--dry-run` para preview sem alterações:
+```bash
+sudo bash scripts/provision.sh --dry-run
+```
 
 ## Comandos do install.sh
 
@@ -173,9 +183,16 @@ Atalhos: `essential` = 1+2+3+4+5+6+8+9 · `all` = tudo
 ### Scripts Bin (~/.local/bin)
 - `bt-postlogin-fix` — power-cycle BT após WirePlumber (serviço de usuário)
 - `install-bt-fix` — fix root one-shot para TP-Link UB5A (modprobe + udev + sudoers)
+- `xbox-drift-fix` — filtro de drift do Xbox Wireless Controller via evsieve (start/stop/status)
 - `pybox` — launcher PyBox (venv dedicado)
 - `clipa` — Clipboard Assistant (fzf, Wayland/X11)
 - `gca` — Git Commit Assistant (Python)
+- `qwen-edit` — edição/transformação de imagens via HuggingFace Space (LoRA adapters)
+- `hydra` — launcher Hydra AppImage
+
+### Scripts de Sistema (scripts/)
+- `provision.sh` — menu interativo de provisioning pós-reboot (root, com --dry-run)
+- `otimizar_armazenamento.sh` — limpeza de espaço (Snapper, pacman cache, Flatpak, Steam, journal, Btrfs balance)
 
 ### Serviços
 - `bt-postlogin-fix.service` — estabiliza Bluetooth no login
@@ -251,6 +268,20 @@ O MAC do headset está hardcoded no `bin/bt-postlogin-fix` e em `shell/fish/conf
 41:42:FF:6A:85:40
 ```
 Altere se usar um headset diferente.
+
+### Xbox Wireless Controller (Drift Fix)
+
+O controle Xbox via Bluetooth pode apresentar drift no analógico esquerdo.
+O script `bin/xbox-drift-fix` usa `evsieve` para aplicar um deadzone:
+
+```bash
+xbox-drift-fix start          # ativa deadzone (±3000, padrão)
+xbox-drift-fix start zero     # desativa analógico esquerdo completamente
+xbox-drift-fix stop           # desativa
+xbox-drift-fix status         # verifica estado
+```
+
+Requer: `evsieve` (AUR) e NOPASSWD para evsieve em `/etc/sudoers.d/evsieve`.
 
 ## Licença
 

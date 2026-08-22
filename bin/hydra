@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# =============================================================================
+# hydra
+# =============================================================================
+# Launcher para Hydra AppImage (post-exploitation framework).
+# A AppImage deve estar em ~/.local/bin/hydra.AppImage.
+# =============================================================================
+exec "${HOME}/.local/bin/hydra.AppImage" "$@"

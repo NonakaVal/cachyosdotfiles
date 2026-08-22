@@ -8,8 +8,9 @@
 # Atalhos:
 #   sudo bash scripts/provision.sh essential   # update + repos + pacman + aur + flatpak + tweaks + services
 #   sudo bash scripts/provision.sh all         # tudo
+#   sudo bash scripts/provision.sh --dry-run   # preview sem alterações
 # =============================================================================
-set -uo pipefail
+set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS_DIR="${DOTFILES_DIR}/scripts"
@@ -24,6 +25,23 @@ log()     { echo -e "${GREEN}==>${NC} $*"; }
 warn()    { echo -e "${YELLOW}!! ${NC} $*"; }
 info()    { echo -e "${CYAN}--${NC} $*"; }
 fail()    { echo -e "${RED}ERRO:${NC} $*"; }
+
+# ---------------------------------------------------------------------------
+# Dry-run
+# ---------------------------------------------------------------------------
+DRY_RUN=false
+if [[ "${1:-}" == "--dry-run" ]]; then
+    DRY_RUN=true
+    shift
+    warn "DRY RUN — nenhuma alteração será feita"
+    # Sobrescreve comandos destrutivos com versões dry-run
+    pacman()  { echo "[dry] pacman $*"; }
+    yay()     { echo "[dry] yay $*"; }
+    flatpak() { echo "[dry] flatpak $*"; }
+    chsh()    { echo "[dry] chsh $*"; }
+    systemctl() { echo "[dry] systemctl $*"; }
+    sed()     { echo "[dry] sed $*"; }
+fi
 
 # ---------------------------------------------------------------------------
 # Verificar root
@@ -226,10 +244,22 @@ do_fish_shell() {
 }
 
 # ---------------------------------------------------------------------------
-# 10. Dotfiles (install.sh como usuário)
+# 10. Otimização de armazenamento
+# ---------------------------------------------------------------------------
+do_optimize() {
+    log "10. Otimização de armazenamento..."
+    if [[ -f "${SCRIPTS_DIR}/otimizar_armazenamento.sh" ]]; then
+        bash "${SCRIPTS_DIR}/otimizar_armazenamento.sh"
+    else
+        warn "otimizar_armazenamento.sh não encontrado. Pulando."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# 11. Dotfiles (install.sh como usuário)
 # ---------------------------------------------------------------------------
 do_dotfiles() {
-    log "10. Aplicando dotfiles (symlinks)..."
+    log "11. Aplicando dotfiles (symlinks)..."
     if [[ -f "${DOTFILES_DIR}/install.sh" ]]; then
         sudo -u "$REAL_USER" bash "${DOTFILES_DIR}/install.sh" all
     else
@@ -257,12 +287,13 @@ show_menu() {
     echo -e "  ${GREEN}8${NC}  services        Habilitar serviços systemd"
     echo -e "  ${GREEN}9${NC}  fish            Fish como shell padrão"
     echo -e "  ${GREEN}A${NC}  dotfiles        Aplicar symlinks (install.sh)"
+    echo -e "  ${GREEN}B${NC}  optimize        Otimizar armazenamento (Btrfs/Snapper/Flatpak)"
     echo ""
-    echo -e "  ${YELLOW}essentials${NC}     = 1+2+3+4+5+6+8+9 (sem bluetooth/dotfiles)"
+    echo -e "  ${YELLOW}essentials${NC}     = 1+2+3+4+5+6+8+9 (sem bluetooth/dotfiles/optimize)"
     echo -e "  ${YELLOW}all${NC}            = tudo acima"
     echo -e "  ${YELLOW}q${NC}              sair"
     echo ""
-    read -rp "Escolha [1-9,A,all,essentials,q]: " choice
+    read -rp "Escolha [1-9,A-B,all,essentials,q]: " choice
     echo ""
 
     case "${choice,,}" in
@@ -276,6 +307,7 @@ show_menu() {
         8|services)       do_services ;;
         9|fish)           do_fish_shell ;;
         a|dotfiles)       do_dotfiles ;;
+        b|optimize)       do_optimize ;;
         essentials)
             do_system_update
             do_repos
@@ -297,6 +329,7 @@ show_menu() {
             do_services
             do_fish_shell
             do_dotfiles
+            do_optimize
             ;;
         q|quit|exit)      exit 0 ;;
         *)                warn "Opção inválida: $choice" ;;
@@ -336,11 +369,12 @@ if [[ $# -ge 1 ]]; then
             do_services
             do_fish_shell
             do_dotfiles
+            do_optimize
             log "Provisioning completo! Reinicie o sistema."
             exit 0
             ;;
         help|--help|-h)
-            echo "Uso: sudo bash $0 [essential|all]"
+            echo "Uso: sudo bash $0 [essential|all|--dry-run]"
             echo "  sem argumentos = menu interativo"
             exit 0
             ;;

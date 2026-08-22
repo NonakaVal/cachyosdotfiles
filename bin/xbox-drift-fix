@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# =============================================================================
+# xbox-drift-fix
+# =============================================================================
+# Liga/desliga o filtro de drift do Xbox Wireless Controller via evsieve.
+#
+# Uso:
+#   xbox-drift-fix start [deadzone|zero]   # ativa (default: deadzone)
+#   xbox-drift-fix stop                    # desativa
+#   xbox-drift-fix status
+#
+# Requer: evsieve instalado (yay -S evsieve / paru -S evsieve)
+# =============================================================================
+set -euo pipefail
+
+PIDFILE="/tmp/xbox-drift-fix.pid"
+MODE="${2:-deadzone}"
+DEADZONE=3000   # ajuste aqui se ainda notar tremor perto do centro
+
+find_device() {
+    # Controle bluetooth via uhid não gera symlink em /dev/input/by-id,
+    # então escaneamos por nome direto no sysfs. Pegamos o event mais
+    # ALTO (mais recente) chamado exatamente "Xbox Wireless Controller",
+    # pra ignorar entradas "fantasma" deixadas por reconexões antigas.
+    local candidate="" best=-1 num
+    for _ in $(seq 1 20); do
+        for p in /sys/class/input/event*; do
+            [ -r "$p/device/name" ] || continue
+            if [ "$(cat "$p/device/name")" = "Xbox Wireless Controller" ]; then
+                num="${p##*event}"
+                if [ "$num" -gt "$best" ]; then
+                    best="$num"
+                    candidate="/dev/input/event${num}"
+                fi
+            fi
+        done
+        if [ -n "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+start() {
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        echo "Já está rodando (PID $(cat "$PIDFILE"))."
+        exit 0
+    fi
+
+    echo "Procurando o controle Xbox..."
+    DEV=$(find_device) || { echo "Controle Xbox não encontrado (20s timeout)."; exit 1; }
+    echo "Usando: $DEV"
+
+    if [ "$MODE" = "zero" ]; then
+        MAPS=(--map abs:x ::0 --map abs:y ::0)
+        echo "Modo: ZERO (analógico esquerdo totalmente desativado)"
+    else
+        MAPS=(--map "abs:x:-${DEADZONE}~${DEADZONE}" abs:x:0
+              --map "abs:y:-${DEADZONE}~${DEADZONE}" abs:y:0)
+        echo "Modo: DEADZONE (±${DEADZONE}, movimento real preservado)"
+    fi
+
+    # Confirma que o sudo não vai pedir senha em loop (configure NOPASSWD
+    # pro evsieve em /etc/sudoers.d/ — ver instruções no README).
+    if ! sudo -n evsieve --version >/dev/null 2>&1; then
+        echo "ERRO: 'sudo evsieve' está pedindo senha." >&2
+        echo "Configure NOPASSWD pro evsieve em /etc/sudoers.d/evsieve," >&2
+        echo "senão o loop de auto-restart vai ficar pedindo senha sem parar." >&2
+        exit 1
+    fi
+
+    # Loop de auto-restart: se o Bluetooth cair/reconectar, o evsieve
+    # morre e o script relança sozinho, sem precisar reabrir o jogo.
+    (
+        while true; do
+            DEV=$(find_device) || { sleep 2; continue; }
+            sudo evsieve \
+                --input "$DEV" grab=force persist=exit \
+                "${MAPS[@]}" \
+                --output name="Xbox Wireless Controller - drift fix" \
+                || true
+            echo "$(date '+%H:%M:%S') evsieve caiu, tentando reconectar..." >&2
+            sleep 2
+        done
+    ) &
+
+    echo $! > "$PIDFILE"
+    echo "Ativo (PID $!). Use 'xbox-drift-fix stop' para desligar."
+}
+
+stop() {
+    if [ ! -f "$PIDFILE" ]; then
+        echo "Não está rodando."
+        exit 0
+    fi
+    PID=$(cat "$PIDFILE")
+    kill "$PID" 2>/dev/null || true
+    pkill -f "evsieve --input.*grab=force" 2>/dev/null || true
+    sudo pkill -f "evsieve --input.*grab=force" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    echo "Desativado."
+}
+
+status() {
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        echo "Rodando (PID $(cat "$PIDFILE"))."
+    else
+        echo "Parado."
+    fi
+}
+
+case "${1:-}" in
+    start)  start ;;
+    stop)   stop ;;
+    status) status ;;
+    *) echo "Uso: $0 {start [deadzone|zero]|stop|status}"; exit 1 ;;
+esac
