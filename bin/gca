@@ -6,8 +6,15 @@ Uso:
     gca --stage-all        # IA: gera, confirma, stage all + commit
     gca --commit           # IA: gera, confirma, commit (sem stage)
     gca -y                 # IA direto (sem confirmação)
+    gca --set-api-key CHAVE # Salva a chave em ~/config.py
+    gca --set-api-key       # Pede a chave com entrada oculta
 """
 
+import ast
+import getpass
+import importlib.util
+import tempfile
+import warnings
 import subprocess
 import sys
 import os
@@ -51,6 +58,67 @@ COMMIT_TYPES = {
 
 IGNORED_PREFIXES = (".obsidian/", ".vscode/", ".idea/")
 IGNORED_SUFFIXES = (".env", ".env.local", ".env.development", ".env.production", ".env.test")
+
+
+def set_api_key(args):
+    if len(args) > 1:
+        print("❌ Uso: gca --set-api-key [CHAVE]", file=sys.stderr)
+        return 1
+    try:
+        if args:
+            key = args[0].strip()
+        else:
+            # Não permita o fallback do getpass que pode exibir a entrada.
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", getpass.GetPassWarning)
+                key = getpass.getpass("Nova chave de API: ").strip()
+        if not key or "\n" in key or "\r" in key:
+            print("❌ A chave deve ser preenchida em uma única linha.", file=sys.stderr)
+            return 1
+
+        path = (HOME_DIR / "config.py").resolve()
+        source = path.read_bytes()
+        tree = ast.parse(source)
+        matches = [node for node in tree.body
+                   if isinstance(node, (ast.Assign, ast.AnnAssign))
+                   and any(isinstance(target, ast.Name) and target.id == "GEMINI_API_KEY"
+                           for target in (node.targets if isinstance(node, ast.Assign)
+                                          else [node.target]))]
+        if len(matches) != 1:
+            raise ValueError("ambiguous assignment")
+        node = matches[0]
+        if isinstance(node, ast.Assign) and len(node.targets) != 1:
+            raise ValueError("shared assignment")
+        value = node.value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            raise ValueError("expected string literal")
+        lines = source.splitlines(keepends=True)
+        start = sum(map(len, lines[:value.lineno - 1])) + value.col_offset
+        end = sum(map(len, lines[:value.end_lineno - 1])) + value.end_col_offset
+        updated = source[:start] + ascii(key).encode("ascii") + source[end:]
+        ast.parse(updated)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
+                temporary = Path(handle.name)
+                os.fchmod(handle.fileno(), path.stat().st_mode & 0o777)
+                handle.write(updated)
+                handle.flush()
+                os.fsync(handle.fileno())
+            # Evita reutilizar a chave anterior em um cache de mesmo tamanho/data.
+            Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+    except (EOFError, KeyboardInterrupt, getpass.GetPassWarning):
+        print("\n❌ Entrada oculta indisponível ou cancelada; chave não alterada.", file=sys.stderr)
+        return 1
+    except (OSError, SyntaxError, ValueError):
+        print("❌ Não foi possível atualizar GEMINI_API_KEY em ~/config.py.", file=sys.stderr)
+        return 1
+    print("✅ Chave de API atualizada em ~/config.py.")
+    return 0
 
 
 # ── helpers de git/shell ────────────────────────────────────────────────
@@ -241,7 +309,42 @@ def check_git_repo():
         sys.exit(1)
 
 
+def show_main_menu():
+    key = str(GEMINI_API_KEY or "").strip()
+    if key in ("", "SUA_CHAVE_AQUI"):
+        key_label = "não configurada"
+    elif len(key) <= 4:
+        key_label = "•••• (configurada)"
+    else:
+        suffix = "".join(c if c.isprintable() else "?" for c in key[-4:])
+        key_label = "••••" + suffix
+
+    print("\n" + "─" * 52)
+    print("  🐙 GCA · Git Commit Assistant")
+    print("─" * 52)
+    print(f"  Chave de API: {key_label}")
+    print("  Trocar chave: gca --set-api-key")
+    print("\n  ARQUIVOS · alterações no Git")
+    status = run(["git", "status", "--short"]).stdout.rstrip("\n")
+    if status:
+        for line in status.splitlines():
+            print(f"    {line}")
+    else:
+        print("    Nenhuma alteração pendente.")
+    print("\n  OPÇÕES")
+    print("    [1] 📝 Novo commit")
+    print("    [2] 🚀 Push")
+    print("    [3] 👋 Sair")
+    print("─" * 52)
+
+
 def main():
+    if "--set-api-key" in sys.argv[1:]:
+        if sys.argv[1] != "--set-api-key":
+            print("❌ Use --set-api-key separadamente.", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(set_api_key(sys.argv[2:]))
+
     if len(sys.argv) > 1:
         args = sys.argv[1:]
         ia_commit(stage_all="--commit" not in args, auto_confirm="-y" in args or "--yes" in args)
@@ -250,9 +353,7 @@ def main():
     check_git_repo()
     clear()
     while True:
-        print("\n" + "─" * 52)
-        subprocess.run(["git", "status", "--short"])
-        print("  [1] 📝 Novo commit   [2] 🚀 Push   [3] 👋 Sair")
+        show_main_menu()
         choice = input("\n  Escolha: ").strip()
         if choice == "1":
             commit_flow()
